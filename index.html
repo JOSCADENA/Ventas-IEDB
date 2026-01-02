@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Ventas - Iglesia</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body class="bg-gray-100 p-2 md:p-6">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <header class="bg-white p-6 rounded-lg shadow-sm mb-6 flex flex-col md:flex-row justify-between items-center border-l-8 border-indigo-600">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800">Registro de Ventas Iglesia</h1>
+                <input type="text" id="nombreActividad" value="Actividad 16 de Noviembre" class="text-gray-500 border-b border-dashed focus:outline-none w-full">
+            </div>
+            <div class="text-right mt-4 md:mt-0">
+                <p class="text-sm text-gray-400 font-bold uppercase">Módulo de Tesorería</p>
+                <p class="text-xs text-gray-400" id="fechaActual"></p>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="grid lg:grid-cols-3 gap-6">
+            <!-- Formulario de Venta -->
+            <div id="formularioVenta"></div>
+
+            <!-- Lista de Ventas y Resumen -->
+            <div class="lg:col-span-2 space-y-4">
+                <div id="listaVentas"></div>
+                <div id="resumenEstadisticas"></div>
+                <div id="metodosPagoResumen"></div>
+                <button onclick="descargarPDF()" class="w-full bg-gray-800 hover:bg-black text-white font-bold py-4 rounded-xl shadow-lg flex justify-center items-center gap-2">
+                    📄 Descargar Reporte y Cuadre Final
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Código JavaScript unificado (sin módulos) -->
+    <script>
+        // VentasManager
+        class VentasManager {
+            constructor() {
+                this.listaVentas = JSON.parse(localStorage.getItem('ventasIglesia')) || [];
+            }
+
+            agregarVenta(venta) {
+                const totalVenta = venta.cantidad * venta.precio;
+                const saldo = totalVenta - venta.pagado;
+                let estado = saldo <= 0 ? "COMPLETO" : (venta.pagado > 0 ? "A MEDIAS" : "DEUDA");
+                
+                const nuevaVenta = {
+                    ...venta,
+                    id: Date.now(),
+                    fecha: new Date().toLocaleString(),
+                    totalVenta: totalVenta,
+                    saldo: saldo,
+                    estado: estado
+                };
+                
+                this.listaVentas.push(nuevaVenta);
+                this.guardarEnStorage();
+                return nuevaVenta;
+            }
+
+            eliminarVenta(id) {
+                this.listaVentas = this.listaVentas.filter(v => v.id !== id);
+                this.guardarEnStorage();
+            }
+
+            obtenerEstadisticas() {
+                let estadisticas = {
+                    platosVendidos: 0,
+                    productosVendidos: 0,
+                    totalVentas: 0,
+                    totalDeuda: 0,
+                    efectivo: 0,
+                    qrTransf: 0
+                };
+
+                this.listaVentas.forEach(v => {
+                    if (v.tipo === "Plato") {
+                        estadisticas.platosVendidos += v.cantidad;
+                    } else {
+                        estadisticas.productosVendidos += v.cantidad;
+                    }
+
+                    estadisticas.totalVentas += v.totalVenta;
+                    estadisticas.totalDeuda += v.saldo;
+
+                    if (v.metodoPago === "Efectivo") {
+                        estadisticas.efectivo += v.pagado;
+                    } else {
+                        estadisticas.qrTransf += v.pagado;
+                    }
+                });
+
+                return estadisticas;
+            }
+
+            guardarEnStorage() {
+                localStorage.setItem('ventasIglesia', JSON.stringify(this.listaVentas));
+            }
+
+            obtenerVentas() {
+                return this.listaVentas;
+            }
+        }
+
+        // Instancia global
+        const ventasManager = new VentasManager();
+
+        // UI Functions
+        function inicializarUI() {
+            document.getElementById('fechaActual').innerText = new Date().toLocaleDateString();
+            cargarComponentes();
+        }
+
+        function cargarComponentes() {
+            // Cargar formulario
+            document.getElementById('formularioVenta').innerHTML = generarFormulario();
+            configurarEventosFormulario();
+            
+            // Cargar lista de ventas y resumen
+            actualizarListaVentas();
+            actualizarResumen();
+        }
+
+        function generarFormulario() {
+            return `
+                <div class="bg-white p-6 rounded-xl shadow-md space-y-4">
+                    <h2 class="font-bold text-indigo-700 border-b pb-2 text-lg">Nueva Entrada</h2>
+                    
+                    <div class="flex gap-4 p-2 bg-gray-50 rounded-lg justify-center">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="tipoItem" value="Plato" checked class="w-4 h-4 text-indigo-600">
+                            <span class="text-sm font-bold text-gray-700">🍽️ Plato</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="tipoItem" value="Producto" class="w-4 h-4 text-indigo-600">
+                            <span class="text-sm font-bold text-gray-700">📦 Producto</span>
+                        </label>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-500">Hermano / Familia</label>
+                        <input type="text" id="nombre" class="w-full p-2 border rounded" placeholder="Nombre completo">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-500">Detalle del Plato/Producto</label>
+                        <textarea id="detalle" class="w-full p-2 border rounded h-20" placeholder="Ej: Almuerzo completo con carne, arroz, ensalada y postre..."></textarea>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-500">Cantidad</label>
+                            <input type="number" id="cantidad" value="1" min="1" class="w-full p-2 border rounded font-bold" oninput="calcularVenta()">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-500">Precio Unit. (Bs)</label>
+                            <input type="number" id="precio" value="25" class="w-full p-2 border rounded font-bold" oninput="calcularVenta()">
+                        </div>
+                    </div>
+
+                    <div class="bg-indigo-900 text-white p-3 rounded-lg flex justify-between items-center">
+                        <span class="text-sm uppercase font-bold">Total a Cobrar:</span>
+                        <span class="text-xl font-black"><span id="totalCobrar">25</span> Bs.</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-500">Método de Pago</label>
+                            <select id="metodoPago" class="w-full p-2 border rounded font-bold text-sm bg-white">
+                                <option value="Efectivo">💵 Efectivo</option>
+                                <option value="QR">📱 QR / Transf.</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-500">Pago Realizado</label>
+                            <input type="number" id="pagadoReal" value="25" class="w-full p-2 border rounded bg-green-50 font-black text-green-700" oninput="calcularVenta()">
+                        </div>
+                    </div>
+
+                    <div class="bg-yellow-100 p-3 rounded-lg border border-yellow-200">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <p class="text-[10px] font-bold text-yellow-700 uppercase">Recibido (Efectivo)</p>
+                                <input type="number" id="billete" value="0" class="w-24 p-1 border border-yellow-300 rounded" oninput="calcularVenta()">
+                            </div>
+                            <div class="text-right">
+                                <p class="text-[10px] font-bold text-yellow-700 uppercase">Cambio</p>
+                                <p id="cambio" class="text-xl font-black text-yellow-900">0.00</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button onclick="agregarVenta()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl shadow-lg transition transform active:scale-95">
+                        + Registrar Venta
+                    </button>
+                </div>
+            `;
+        }
+
+        function configurarEventosFormulario() {
+            document.getElementById('metodoPago').addEventListener('change', function() {
+                if (this.value === 'QR') {
+                    document.getElementById('billete').value = 0;
+                    document.getElementById('cambio').innerText = "0.00";
+                }
+            });
+        }
+
+        function calcularVenta() {
+            const cant = parseFloat(document.getElementById('cantidad').value) || 0;
+            const precio = parseFloat(document.getElementById('precio').value) || 0;
+            const billete = parseFloat(document.getElementById('billete').value) || 0;
+            
+            const total = cant * precio;
+            document.getElementById('totalCobrar').innerText = total.toFixed(2);
+            
+            if (billete > total) {
+                document.getElementById('cambio').innerText = (billete - total).toFixed(2);
+            } else {
+                document.getElementById('cambio').innerText = "0.00";
+            }
+        }
+
+        function agregarVenta() {
+            const nombre = document.getElementById('nombre').value;
+            const detalle = document.getElementById('detalle').value || "Sin detalle";
+            const cantidad = parseFloat(document.getElementById('cantidad').value);
+            const precio = parseFloat(document.getElementById('precio').value);
+            const pagado = parseFloat(document.getElementById('pagadoReal').value);
+            const metodoPago = document.getElementById('metodoPago').value;
+            const tipo = document.querySelector('input[name="tipoItem"]:checked').value;
+
+            if(!nombre) return alert("Por favor, ingresa el nombre.");
+            if(!detalle) return alert("Por favor, ingresa el detalle del producto.");
+
+            const venta = {
+                tipo,
+                nombre,
+                detalle,
+                cantidad,
+                precio,
+                pagado,
+                metodoPago
+            };
+
+            ventasManager.agregarVenta(venta);
+            actualizarListaVentas();
+            actualizarResumen();
+            
+            // Limpiar formulario
+            document.getElementById('nombre').value = "";
+            document.getElementById('detalle').value = "";
+            document.getElementById('cantidad').value = "1";
+            document.getElementById('precio').value = "25";
+            document.getElementById('pagadoReal').value = "25";
+            document.getElementById('billete').value = "0";
+            document.getElementById('cambio').innerText = "0.00";
+            document.getElementById('totalCobrar').innerText = "25";
+        }
+
+        function actualizarListaVentas() {
+            const ventas = ventasManager.obtenerVentas();
+            
+            document.getElementById('listaVentas').innerHTML = `
+                <div class="bg-white rounded-xl shadow-md overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-50 text-gray-600 uppercase text-[10px]">
+                            <tr>
+                                <th class="p-4 border-b">Tipo / Hermano</th>
+                                <th class="p-4 border-b">Detalle</th>
+                                <th class="p-4 border-b text-center">Cant.</th>
+                                <th class="p-4 border-b text-center">Total</th>
+                                <th class="p-4 border-b text-center">Pagado</th>
+                                <th class="p-4 border-b text-center">Método</th>
+                                <th class="p-4 border-b"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaVentas" class="divide-y divide-gray-100 text-sm">
+                            ${ventas.map(v => `
+                                <tr class="hover:bg-gray-50 border-b">
+                                    <td class="p-4">
+                                        <span class="text-[9px] font-black px-2 py-0.5 rounded ${v.tipo === 'Plato' ? 'bg-blue-100 text-blue-700' : 'bg-indigo-100 text-indigo-700'}">${v.tipo.toUpperCase()}</span>
+                                        <p class="font-bold">${v.nombre}</p>
+                                    </td>
+                                    <td class="p-4 text-xs text-gray-600 max-w-xs">${v.detalle}</td>
+                                    <td class="p-4 text-center font-bold">${v.cantidad}</td>
+                                    <td class="p-4 text-center font-bold">${v.totalVenta.toFixed(2)}</td>
+                                    <td class="p-4 text-center font-bold text-green-600">${v.pagado.toFixed(2)}</td>
+                                    <td class="p-4 text-center text-[10px] font-bold">${v.metodoPago}</td>
+                                    <td class="p-4 text-right">
+                                        <button onclick="eliminarVenta(${v.id})" class="text-red-300 hover:text-red-600 font-bold">✕</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function eliminarVenta(id) {
+            ventasManager.eliminarVenta(id);
+            actualizarListaVentas();
+            actualizarResumen();
+        }
+
+        function actualizarResumen() {
+            const estadisticas = ventasManager.obtenerEstadisticas();
+            
+            document.getElementById('resumenEstadisticas').innerHTML = `
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="bg-blue-600 text-white p-3 rounded-xl shadow text-center">
+                        <p class="text-[10px] uppercase font-bold opacity-80">Platos Vendidos</p>
+                        <p class="text-xl font-black">${estadisticas.platosVendidos}</p>
+                    </div>
+                    <div class="bg-indigo-600 text-white p-3 rounded-xl shadow text-center">
+                        <p class="text-[10px] uppercase font-bold opacity-80">Otros Prod.</p>
+                        <p class="text-xl font-black">${estadisticas.productosVendidos}</p>
+                    </div>
+                    <div class="bg-green-600 text-white p-3 rounded-xl shadow text-center">
+                        <p class="text-[10px] uppercase font-bold opacity-80">Total Ventas</p>
+                        <p class="text-xl font-black">${estadisticas.totalVentas.toFixed(2)}</p>
+                    </div>
+                    <div class="bg-orange-500 text-white p-3 rounded-xl shadow text-center">
+                        <p class="text-[10px] uppercase font-bold opacity-80">Por Cobrar</p>
+                        <p class="text-xl font-black">${estadisticas.totalDeuda.toFixed(2)}</p>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('metodosPagoResumen').innerHTML = `
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-white p-4 rounded-xl shadow border border-gray-200">
+                        <p class="text-xs font-bold text-gray-400">EFECTIVO EN CAJA</p>
+                        <p class="text-lg font-black text-gray-700">${estadisticas.efectivo.toFixed(2)} Bs.</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow border border-gray-200">
+                        <p class="text-xs font-bold text-gray-400">TOTAL QR / TRANSF.</p>
+                        <p class="text-lg font-black text-blue-700">${estadisticas.qrTransf.toFixed(2)} Bs.</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        // PDF Generator
+        function descargarPDF() {
+            const ventas = ventasManager.obtenerVentas();
+            if(ventas.length === 0) return alert("No hay ventas registradas.");
+            
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const actividad = document.getElementById('nombreActividad').value;
+            const estadisticas = ventasManager.obtenerEstadisticas();
+            
+            // Encabezado
+            doc.setFontSize(20);
+            doc.setTextColor(63, 81, 181);
+            doc.text("REPORTE DE VENTAS - IGLESIA", 14, 20);
+            
+            doc.setFontSize(12);
+            doc.setTextColor(0, 0, 0);
+            doc.text(`Actividad: ${actividad}`, 14, 30);
+            doc.text(`Fecha del Reporte: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`, 14, 36);
+            doc.text(`Total de Registros: ${ventas.length}`, 14, 42);
+            
+            // Línea separadora
+            doc.setDrawColor(200, 200, 200);
+            doc.line(14, 46, 196, 46);
+            
+            // Tabla principal
+            const tableData = ventas.map(v => [
+                v.tipo,
+                v.nombre,
+                v.detalle.substring(0, 30) + (v.detalle.length > 30 ? '...' : ''),
+                v.cantidad,
+                `Bs. ${v.precio.toFixed(2)}`,
+                `Bs. ${v.totalVenta.toFixed(2)}`,
+                `Bs. ${v.pagado.toFixed(2)}`,
+                v.metodoPago,
+                v.estado
+            ]);
+
+            doc.autoTable({
+                startY: 50,
+                head: [
+                    ['Tipo', 'Nombre/Familia', 'Detalle del Producto', 'Cant.', 'Precio Unit.', 'Total', 'Pagado', 'Método', 'Estado']
+                ],
+                body: tableData,
+                theme: 'grid',
+                headStyles: { 
+                    fillColor: [63, 81, 181],
+                    textColor: [255, 255, 255],
+                    fontSize: 8
+                },
+                bodyStyles: { fontSize: 8 },
+                columnStyles: {
+                    2: { cellWidth: 40 },
+                    3: { cellWidth: 15 },
+                    4: { cellWidth: 20 },
+                    5: { cellWidth: 20 },
+                    6: { cellWidth: 20 }
+                },
+                margin: { left: 14, right: 14 }
+            });
+            
+            // Resumen detallado por producto
+            const finalY = doc.lastAutoTable.finalY + 15;
+            
+            // Calcular resumen por producto
+            const resumenProductos = {};
+            ventas.forEach(v => {
+                const key = `${v.tipo} - ${v.detalle.substring(0, 30)}`;
+                if (!resumenProductos[key]) {
+                    resumenProductos[key] = {
+                        cantidad: 0,
+                        total: 0
+                    };
+                }
+                resumenProductos[key].cantidad += v.cantidad;
+                resumenProductos[key].total += v.totalVenta;
+            });
+
+            // Tabla de resumen de productos
+            const productData = Object.entries(resumenProductos).map(([producto, datos]) => [
+                producto,
+                datos.cantidad,
+                `Bs. ${(datos.total / datos.cantidad).toFixed(2)}`,
+                `Bs. ${datos.total.toFixed(2)}`
+            ]);
+
+            doc.setFontSize(14);
+            doc.setTextColor(63, 81, 181);
+            doc.text("DETALLE POR PRODUCTO", 14, finalY);
+            
+            doc.autoTable({
+                startY: finalY + 5,
+                head: [['Producto/Plato', 'Cant. Total', 'Precio Prom.', 'Total Vendido']],
+                body: productData,
+                theme: 'grid',
+                headStyles: { 
+                    fillColor: [76, 175, 80],
+                    textColor: [255, 255, 255],
+                    fontSize: 8
+                },
+                bodyStyles: { fontSize: 8 },
+                margin: { left: 14, right: 14 }
+            });
+
+            // Estadísticas finales
+            const statsY = doc.lastAutoTable.finalY + 15;
+            doc.setFontSize(10);
+            doc.setTextColor(0, 0, 0);
+            
+            let y = statsY;
+            doc.text(`CANTIDAD TOTAL DE PLATOS VENDIDOS: ${estadisticas.platosVendidos}`, 14, y);
+            y += 6;
+            doc.text(`CANTIDAD TOTAL DE OTROS PRODUCTOS: ${estadisticas.productosVendidos}`, 14, y);
+            y += 6;
+            doc.text(`VALOR TOTAL DE VENTAS: Bs. ${estadisticas.totalVentas.toFixed(2)}`, 14, y);
+            y += 6;
+            doc.text(`EFECTIVO EN CAJA: Bs. ${estadisticas.efectivo.toFixed(2)}`, 14, y);
+            y += 6;
+            doc.text(`TOTAL EN QR/TRANSFERENCIAS: Bs. ${estadisticas.qrTransf.toFixed(2)}`, 14, y);
+            y += 8;
+            
+            doc.setFontSize(11);
+            doc.setTextColor(200, 0, 0);
+            doc.text(`PENDIENTE POR COBRAR: Bs. ${estadisticas.totalDeuda.toFixed(2)}`, 14, y);
+            
+            doc.save(`Reporte_Ventas_${actividad.replace(/\s+/g, '_')}.pdf`);
+        }
+
+        // Inicializar cuando el DOM esté listo
+        document.addEventListener('DOMContentLoaded', inicializarUI);
+    </script>
+</body>
+</html>
