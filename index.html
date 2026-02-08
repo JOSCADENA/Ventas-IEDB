@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestión de Ventas - Iglesia</title>
+    <title>Gestión de Ventas - IEDB </title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
@@ -13,7 +13,8 @@
         <!-- Header -->
         <header class="bg-white p-6 rounded-lg shadow-sm mb-6 flex flex-col md:flex-row justify-between items-center border-l-8 border-indigo-600">
             <div>
-                <h1 class="text-2xl font-bold text-gray-800">Registro de Ventas Iglesia</h1>
+                <h1 class="text-2xl font-bold text-gray-800">Registro de Ventas - IEDB "JESUS ES EL CAMINO"</h1>
+                <h2 class="text-1xl font-bold text-gray-800">Sociedad de Jovenes - "JOVENES EN ACCION"</h2>
                 <input type="text" id="nombreActividad" value="Actividad 16 de Noviembre" class="text-gray-500 border-b border-dashed focus:outline-none w-full">
             </div>
             <div class="text-right mt-4 md:mt-0">
@@ -350,136 +351,342 @@
             `;
         }
 
-        // PDF Generator
-        function descargarPDF() {
-            const ventas = ventasManager.obtenerVentas();
-            if(ventas.length === 0) return alert("No hay ventas registradas.");
-            
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-            const actividad = document.getElementById('nombreActividad').value;
-            const estadisticas = ventasManager.obtenerEstadisticas();
-            
-            // Encabezado
-            doc.setFontSize(20);
-            doc.setTextColor(63, 81, 181);
-            doc.text("REPORTE DE VENTAS - IGLESIA", 14, 20);
-            
-            doc.setFontSize(12);
-            doc.setTextColor(0, 0, 0);
-            doc.text(`Actividad: ${actividad}`, 14, 30);
-            doc.text(`Fecha del Reporte: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`, 14, 36);
-            doc.text(`Total de Registros: ${ventas.length}`, 14, 42);
-            
-            // Línea separadora
-            doc.setDrawColor(200, 200, 200);
-            doc.line(14, 46, 196, 46);
-            
-            // Tabla principal
-            const tableData = ventas.map(v => [
-                v.tipo,
-                v.nombre,
-                v.detalle.substring(0, 30) + (v.detalle.length > 30 ? '...' : ''),
-                v.cantidad,
-                `Bs. ${v.precio.toFixed(2)}`,
-                `Bs. ${v.totalVenta.toFixed(2)}`,
-                `Bs. ${v.pagado.toFixed(2)}`,
-                v.metodoPago,
-                v.estado
-            ]);
-
-            doc.autoTable({
-                startY: 50,
-                head: [
-                    ['Tipo', 'Nombre/Familia', 'Detalle del Producto', 'Cant.', 'Precio Unit.', 'Total', 'Pagado', 'Método', 'Estado']
-                ],
-                body: tableData,
-                theme: 'grid',
-                headStyles: { 
-                    fillColor: [63, 81, 181],
-                    textColor: [255, 255, 255],
-                    fontSize: 8
-                },
-                bodyStyles: { fontSize: 8 },
-                columnStyles: {
-                    2: { cellWidth: 40 },
-                    3: { cellWidth: 15 },
-                    4: { cellWidth: 20 },
-                    5: { cellWidth: 20 },
-                    6: { cellWidth: 20 }
-                },
-                margin: { left: 14, right: 14 }
-            });
-            
-            // Resumen detallado por producto
-            const finalY = doc.lastAutoTable.finalY + 15;
-            
-            // Calcular resumen por producto
-            const resumenProductos = {};
-            ventas.forEach(v => {
-                const key = `${v.tipo} - ${v.detalle.substring(0, 30)}`;
-                if (!resumenProductos[key]) {
-                    resumenProductos[key] = {
-                        cantidad: 0,
-                        total: 0
-                    };
-                }
-                resumenProductos[key].cantidad += v.cantidad;
-                resumenProductos[key].total += v.totalVenta;
-            });
-
-            // Tabla de resumen de productos
-            const productData = Object.entries(resumenProductos).map(([producto, datos]) => [
-                producto,
-                datos.cantidad,
-                `Bs. ${(datos.total / datos.cantidad).toFixed(2)}`,
-                `Bs. ${datos.total.toFixed(2)}`
-            ]);
-
-            doc.setFontSize(14);
-            doc.setTextColor(63, 81, 181);
-            doc.text("DETALLE POR PRODUCTO", 14, finalY);
-            
-            doc.autoTable({
-                startY: finalY + 5,
-                head: [['Producto/Plato', 'Cant. Total', 'Precio Prom.', 'Total Vendido']],
-                body: productData,
-                theme: 'grid',
-                headStyles: { 
-                    fillColor: [76, 175, 80],
-                    textColor: [255, 255, 255],
-                    fontSize: 8
-                },
-                bodyStyles: { fontSize: 8 },
-                margin: { left: 14, right: 14 }
-            });
-
-            // Estadísticas finales
-            const statsY = doc.lastAutoTable.finalY + 15;
-            doc.setFontSize(10);
-            doc.setTextColor(0, 0, 0);
-            
-            let y = statsY;
-            doc.text(`CANTIDAD TOTAL DE PLATOS VENDIDOS: ${estadisticas.platosVendidos}`, 14, y);
-            y += 6;
-            doc.text(`CANTIDAD TOTAL DE OTROS PRODUCTOS: ${estadisticas.productosVendidos}`, 14, y);
-            y += 6;
-            doc.text(`VALOR TOTAL DE VENTAS: Bs. ${estadisticas.totalVentas.toFixed(2)}`, 14, y);
-            y += 6;
-            doc.text(`EFECTIVO EN CAJA: Bs. ${estadisticas.efectivo.toFixed(2)}`, 14, y);
-            y += 6;
-            doc.text(`TOTAL EN QR/TRANSFERENCIAS: Bs. ${estadisticas.qrTransf.toFixed(2)}`, 14, y);
-            y += 8;
-            
-            doc.setFontSize(11);
-            doc.setTextColor(200, 0, 0);
-            doc.text(`PENDIENTE POR COBRAR: Bs. ${estadisticas.totalDeuda.toFixed(2)}`, 14, y);
-            
-            doc.save(`Reporte_Ventas_${actividad.replace(/\s+/g, '_')}.pdf`);
+// PDF Generator
+function descargarPDF() {
+    const ventas = ventasManager.obtenerVentas();
+    if(ventas.length === 0) return alert("No hay ventas registradas.");
+    
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const actividad = document.getElementById('nombreActividad').value;
+    const estadisticas = ventasManager.obtenerEstadisticas();
+    
+    // Variables para control de páginas
+    let currentY = 20;
+    const marginLeft = 14;
+    const marginRight = 14;
+    const pageHeight = 280; // Altura máxima de la página
+    const espacioMinimoFirmas = 60; // Espacio mínimo necesario para firmas
+    
+    // Función para verificar si hay espacio y agregar nueva página si es necesario
+    function checkSpace(neededSpace) {
+        if (currentY + neededSpace > pageHeight) {
+            doc.addPage();
+            currentY = 20;
+            return true;
         }
+        return false;
+    }
+    
+    // Encabezado
+    doc.setFontSize(20);
+    doc.setTextColor(63, 81, 181);
+    doc.text("REPORTE DE VENTAS - IEDB Jesus Es El Camino", marginLeft, currentY);
+    currentY += 10;
+    
+    doc.setFontSize(15);
+    doc.setTextColor(63, 81, 181);
+    doc.text("Sociedad - Jovenes en Accion", marginLeft, currentY);
+    currentY += 10;
 
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Actividad: ${actividad}`, marginLeft, currentY);
+    currentY += 6;
+    doc.text(`Fecha del Reporte: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`, marginLeft, currentY);
+    currentY += 6;
+    doc.text(`Total de Registros: ${ventas.length}`, marginLeft, currentY);
+    currentY += 10;
+    
+    // Línea separadora
+    doc.setDrawColor(200, 200, 200);
+    doc.line(marginLeft, currentY, 196, currentY);
+    currentY += 5;
+    
+    // Tabla principal
+    const tableData = ventas.map(v => [
+        v.tipo,
+        v.nombre,
+        v.detalle.substring(0, 30) + (v.detalle.length > 30 ? '...' : ''),
+        v.cantidad,
+        `Bs. ${v.precio.toFixed(2)}`,
+        `Bs. ${v.totalVenta.toFixed(2)}`,
+        `Bs. ${v.pagado.toFixed(2)}`,
+        v.metodoPago,
+        v.estado
+    ]);
+
+    doc.autoTable({
+        startY: currentY,
+        head: [
+            ['Tipo', 'Nombre/Familia', 'Detalle del Producto', 'Cant.', 'Precio Unit.', 'Total', 'Pagado', 'Método', 'Estado']
+        ],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { 
+            fillColor: [63, 81, 181],
+            textColor: [255, 255, 255],
+            fontSize: 8
+        },
+        bodyStyles: { fontSize: 8 },
+        columnStyles: {
+            2: { cellWidth: 40 },
+            3: { cellWidth: 15 },
+            4: { cellWidth: 20 },
+            5: { cellWidth: 20 },
+            6: { cellWidth: 20 }
+        },
+        margin: { left: marginLeft, right: marginRight },
+        didDrawPage: function(data) {
+            // Actualizar currentY después de dibujar la tabla
+            currentY = data.cursor.y;
+        }
+    });
+    
+    // Actualizar currentY después de la tabla
+    currentY = doc.lastAutoTable.finalY + 10;
+    checkSpace(30); // Verificar espacio para siguiente sección
+    
+    // Resumen detallado por producto
+    doc.setFontSize(14);
+    doc.setTextColor(0, 74, 173);
+    doc.text("DETALLE POR PRODUCTO", marginLeft, currentY);
+    currentY += 10;
+    
+    // Calcular resumen por producto
+    const resumenProductos = {};
+    ventas.forEach(v => {
+        const key = `${v.tipo} - ${v.detalle.substring(0, 30)}`;
+        if (!resumenProductos[key]) {
+            resumenProductos[key] = {
+                cantidad: 0,
+                total: 0
+            };
+        }
+        resumenProductos[key].cantidad += v.cantidad;
+        resumenProductos[key].total += v.totalVenta;
+    });
+
+    // Tabla de resumen de productos
+    const productData = Object.entries(resumenProductos).map(([producto, datos]) => [
+        producto,
+        datos.cantidad,
+        `Bs. ${(datos.total / datos.cantidad).toFixed(2)}`,
+        `Bs. ${datos.total.toFixed(2)}`
+    ]);
+
+    doc.autoTable({
+        startY: currentY,
+        head: [['Producto/Plato', 'Cant. Total', 'Precio Prom.', 'Total Vendido']],
+        body: productData,
+        theme: 'grid',
+        headStyles: { 
+            fillColor: [44, 62, 80],
+            textColor: [255, 255, 255],
+            fontSize: 8
+        },
+        bodyStyles: { fontSize: 8 },
+        margin: { left: marginLeft, right: marginRight },
+        didDrawPage: function(data) {
+            currentY = data.cursor.y;
+        }
+    });
+    
+    currentY = doc.lastAutoTable.finalY + 10;
+    
+    // Verificar si hay espacio para las estadísticas y firmas
+    // Necesitamos: estadísticas (30px) + nota (40px) + firmas (60px) = 130px mínimo
+    if (checkSpace(130)) {
+        // Si agregamos nueva página, ajustar currentY
+        currentY = 20;
+    }
+    
+    // Estadísticas finales
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    
+    doc.text(`CANTIDAD TOTAL DE PLATOS VENDIDOS: ${estadisticas.platosVendidos}`, marginLeft, currentY);
+    currentY += 6;
+    doc.text(`CANTIDAD TOTAL DE OTROS PRODUCTOS: ${estadisticas.productosVendidos}`, marginLeft, currentY);
+    currentY += 6;
+    doc.text(`VALOR TOTAL DE VENTAS: Bs. ${estadisticas.totalVentas.toFixed(2)}`, marginLeft, currentY);
+    currentY += 6;
+    doc.text(`EFECTIVO EN CAJA: Bs. ${estadisticas.efectivo.toFixed(2)}`, marginLeft, currentY);
+    currentY += 6;
+    doc.text(`TOTAL EN QR/TRANSFERENCIAS: Bs. ${estadisticas.qrTransf.toFixed(2)}`, marginLeft, currentY);
+    currentY += 8;
+    
+    doc.setFontSize(11);
+    doc.setTextColor(200, 0, 0);
+    doc.text(`PENDIENTE POR COBRAR: Bs. ${estadisticas.totalDeuda.toFixed(2)}`, marginLeft, currentY);
+    
+    // NOTA IMPORTANTE
+    currentY += 15;
+    doc.setFontSize(9);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont(undefined, 'bold');
+    doc.text("NOTA IMPORTANTE:", marginLeft, currentY);
+    currentY += 5;
+    doc.setFont(undefined, 'normal');
+    
+    const notaText = "Si existen deudas pendientes, este reporte se mantiene Abierto y solo requiere la firma del Tesorero; los registros actualizados se presentarán en un nuevo reporte tras el pago total. Si no hay deudas, el reporte será firmado por todo el personal responsable y archivado como constancia oficial.";
+    
+    // Dividir el texto en líneas si es muy largo
+    const splitText = doc.splitTextToSize(notaText, 180);
+    
+    // Verificar si hay espacio para la nota
+    if (checkSpace(splitText.length * 5 + 15)) {
+        currentY = 20;
+    }
+    
+    doc.text(splitText, marginLeft, currentY);
+    currentY += (splitText.length * 5) + 15;
+    
+    // Verificar si hay espacio para las firmas
+    if (checkSpace(50)) {
+        currentY = 20;
+    }
+    
+    // Línea separadora antes de las firmas
+    doc.setDrawColor(150, 150, 150);
+    doc.line(marginLeft, currentY, 196, currentY);
+    currentY += 10;
+    
+    // Título para las firmas
+    doc.setFontSize(12);
+    doc.setTextColor(63, 81, 181);
+    doc.text("CONSTANCIA DE RECEPCIÓN Y REVISIÓN", 105, currentY, null, null, 'center');
+    doc.text("POR LOS ENCARGADOS DE LA ACTIVIDAD", 105, currentY + 6, null, null, 'center');
+    
+    currentY += 20;
+    
+    // Crear líneas para firmas (3 columnas)
+    const columnWidth = 60;
+    const startX = marginLeft;
+    
+    // Verificar espacio final para firmas
+    if (currentY + 30 > pageHeight) {
+        doc.addPage();
+        currentY = 20;
+        
+        // Redibujar título en nueva página
+        doc.setFontSize(12);
+        doc.setTextColor(63, 81, 181);
+        doc.text("CONSTANCIA DE RECEPCIÓN Y REVISIÓN", 105, currentY, null, null, 'center');
+        doc.text("POR LOS ENCARGADOS DE LA ACTIVIDAD", 105, currentY + 6, null, null, 'center');
+        currentY += 20;
+    }
+    
+    // Primera columna - Maestro SS.JJ
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    //doc.text("Maestro SS.JJ", startX, currentY);
+    doc.setDrawColor(0, 0, 0);
+    doc.line(startX, currentY + 2, startX + 50, currentY + 2);
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text("Maestro SS.JJ", startX, currentY + 10);
+    //doc.text("Firma y Sello", startX, currentY + 10);
+    
+    // Segunda columna - Presidente SS.JJ
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    //doc.text("Presidente SS.JJ", startX + columnWidth, currentY);
+    doc.setDrawColor(0, 0, 0);
+    doc.line(startX + columnWidth, currentY + 2, startX + columnWidth + 50, currentY + 2);
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text("Presidente SS.JJ", startX + columnWidth, currentY + 10);
+    //doc.text("Firma y Sello", startX + columnWidth, currentY + 10);
+    
+    // Tercera columna - Tesorero SS.JJ
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    //doc.text("Tesorero SS.JJ", startX + (columnWidth * 2), currentY);
+    doc.setDrawColor(0, 0, 0);
+    doc.line(startX + (columnWidth * 2), currentY + 2, startX + (columnWidth * 2) + 50, currentY + 2);
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text("Tesorero SS.JJ", startX + (columnWidth * 2), currentY + 10);
+    //doc.text("Firma y Sello", startX + (columnWidth * 2), currentY + 10);
+    
+    // Fecha de firma
+    currentY += 25;
+    doc.setFontSize(9);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Fecha de firma: ___________________________`, marginLeft, currentY);
+    
+    // Agregar página para deudas si es necesario
+    if (estadisticas.totalDeuda > 0) {
+        doc.addPage();
+        currentY = 20;
+        
+        doc.setFontSize(14);
+        doc.setTextColor(200, 0, 0);
+        doc.text("REPORTE ABIERTO - DEUDAS PENDIENTES", 105, currentY, null, null, 'center');
+        currentY += 15;
+        
+        doc.setFontSize(11);
+        doc.setTextColor(0, 0, 0);
+        doc.text("Este reporte está marcado como ABIERTO debido a las siguientes deudas:", marginLeft, currentY);
+        currentY += 15;
+        
+        const deudas = ventas.filter(v => v.saldo > 0);
+        deudas.forEach((v, index) => {
+            // Verificar espacio para cada deuda
+            if (currentY > 250) {
+                doc.addPage();
+                currentY = 20;
+            }
+            
+            doc.text(`${index + 1}. ${v.nombre} - ${v.detalle.substring(0, 40)}`, marginLeft + 5, currentY);
+            doc.text(`   Deuda: Bs. ${v.saldo.toFixed(2)} (Pagado: Bs. ${v.pagado.toFixed(2)} de Bs. ${v.totalVenta.toFixed(2)})`, marginLeft + 10, currentY + 5);
+            currentY += 15;
+        });
+        
+        currentY += 10;
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.text("Firma del Tesorero (solo para reportes abiertos):", marginLeft, currentY);
+        currentY += 10;
+        doc.setDrawColor(0, 0, 0);
+        doc.line(marginLeft, currentY, marginLeft + 70, currentY);
+        doc.text("___________________________", marginLeft, currentY + 8);
+        doc.text("Nombre y Firma del Tesorero", marginLeft, currentY + 15);
+    }
+    
+    // Agregar pie de página a todas las páginas
+    const pageCount = doc.internal.getNumberOfPages();
+    for(let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        doc.text(
+            `Página ${i} de ${pageCount} - Generado el ${new Date().toLocaleDateString()}`,
+            105,
+            285,
+            null,
+            null,
+            'center'
+        );
+        doc.text(
+            'Reporte de Ventas - IEDB "Jesus es el Camino"',
+            105,
+            290,
+            null,
+            null,
+            'center'
+        );
+    }
+    
+    doc.save(`Reporte_Ventas_${actividad.replace(/\s+/g, '_')}_${new Date().toLocaleDateString().replace(/\//g, '-')}.pdf`);
+}
         // Inicializar cuando el DOM esté listo
         document.addEventListener('DOMContentLoaded', inicializarUI);
     </script>
+
+
+
+
 </body>
 </html>
